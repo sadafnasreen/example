@@ -1,0 +1,164 @@
+---
+Author: Sadaf Nasreen
+title: "example"
+output: pdf_document
+---
+ This script solves the following contents
+ list outlines
+* first prepare our dataset to convert daily  into months and annually using sum function
+* Draw line and quantile plot
+* Draw mean monthly precipitation using bar plot
+* Draw sum of monthly precipitation using box plot
+* Draw trend series of annual data set
+*  Trend and significance value of monthly rainfall
+ 
+ Add libararies which are useful to write r script. Kindly run all files at one moment.
+
+```{r}
+library("readxl")
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+
+my_data <- read_excel("C:/Users/snasreen/Downloads/skill_eval.xlsx")
+
+
+#convert daily data into monthly 
+Mon_date = strftime(my_data$DATE, "%Y-%m")
+Mon_Rainfall <- my_data$Rainfall
+aggr_dailytomon = aggregate( Mon_Rainfall ~ Mon_date, FUN = sum)
+x <- aggr_dailytomon$Mon_date
+y <- aggr_dailytomon$Mon_Rainfall
+
+#convert daily data into annual
+Year_date = strftime(my_data$DATE, "%Y")
+Year_Rainfall <- my_data$Rainfall
+aggr_dailytoannual = aggregate( Year_Rainfall ~ Year_date, FUN = sum)
+x1 <- aggr_dailytoannual$Year_date
+y1 <- aggr_dailytoannual$Year_Rainfall
+
+# line plot and quantile plot of yearly data set x1, y1
+plot(x1,y1, type="b", col="blue", lwd=2, pch=5, xlab="time(years)", ylab="Rainfall")+
+  title("Anuual Precipitation (1950-2019)")
+
+p <- ggplot(aggr_dailytoannual, aes(sample = Year_Rainfall))
+p + stat_qq() + stat_qq_line()+
+  labs(title = "Normal Q-Q quantile plot",y = "Rainfall_annual",x = "theoretical") + 
+  theme_bw(base_size = 15)
+
+
+```
+The above code calculates annual precipitation amount using line and quantile plots. Blue color shows the annual variation of rainfall at czech republic starts from January 1950 to May 2019, goes to sudden decrease rainfall at 2019.
+
+The Q-Q plot, or quantile to quantile plot, is a graph that tests the conformity between the empirical distribution and the given theoretical distribution.
+
+This above quantile figure shows that the the data is normally distributed, more than 50% medians lies on the line, it means that the points in the QQ-normal plot lie on a straight diagonal line and the deviations from the straight line are minimal.
+
+```{r}
+
+# Convert daily data into monthly data set using sum function and draw box plot
+
+my_data_new <- mutate(my_data, mo = month(DATE), yr = year(DATE)) %>%
+  filter(DATE >= "1950-01-01") %>%
+  group_by(yr, mo) %>% 
+  summarise(prs1 = sum(Rainfall, na.rm = TRUE))
+
+ggplot(my_data_new) + 
+  geom_boxplot(aes(x = mo, y = prs1, group = mo))+
+  labs(title = "(Monthly Precipitation of Czech Repbulic (1950-2019))",y = "cummulative rainfall",x = "Date(Months)") + 
+  theme_bw(base_size = 15)
+
+# Convert daily data into monthly mean data set using mean function and draw bar plot
+
+my_data <- mutate(my_data, mo = month(DATE), yr = year(DATE)) %>%
+  filter(DATE >= "1950-01-01") %>%
+  group_by(yr, mo) %>% 
+  summarise(prs = mean(Rainfall, na.rm = TRUE))
+
+
+ggplot(data = my_data, aes(x = mo, y = prs, group=mo)) +
+  geom_bar(stat="identity",color="purple") +
+  labs(title = "12 Months Rainfall of Czech Republic 01/1950-05/2019",
+       x = "Date(Months)", y = " mean rainfall")
+```
+ 
+Boxplot consists of a "box" which goes from the first quartile (Q1) to the third quartile (Q3). Within the box, a vertical line is drawn at the Q2, the median of the data set which is mid-point of the data represents the middle 50% of scores for the group.. Two horizontal lines, called whiskers, extend from the front and back of the box.
+Size of box shows wider at the month of July and August which depicts much precipitation and while miminum rainfall appear at the month of November.
+
+
+TO compare the monthly mean data set and track changes over time ,a bar plot is used here best to explain the influence of precipitation of each month.  We can see that the most frequent rainfall occurs at the month of June and July and lessor amount of rainfall falls in Feburary.
+ 
+
+```{r}
+library(boot)
+library(tseries)
+library(Kendall)
+data_monthly <- data.frame(months=x,Rainfall_months=y)
+Monthtrend_Series<- ts (data_monthly$Rainfall_months, frequency = 12, start = 1950) # freq 12 => Monthly data
+summary(Monthtrend_Series) 
+trend <- seq_along(Monthtrend_Series) 
+str(data_monthly)
+adf.test(Monthtrend_Series)
+kpss.test(Monthtrend_Series)
+plot(Monthtrend_Series, col="green",lwd=0.3,pch=2,ylab="Rainfall")+title("Trend of Monthly time series")
+plot((diff(log(Monthtrend_Series))), col="blue")
+lines(lowess(time(diff(log(Monthtrend_Series))),(diff(log(Monthtrend_Series)))),col="red", lwd=2,ylab="Rainfall")+title("Trend of Monthly time series")
+par(mfrow=c(1,1))
+acf(Monthtrend_Series)
+pacf(Monthtrend_Series)
+
+res <- MannKendall(Monthtrend_Series)
+
+print(res)
+summary(res)
+
+MKtau <- function(z) MannKendall(z)$tau
+tsboot(Monthtrend_Series, MKtau, R=700, l=5, sim="fixed")
+boot.out <- tsboot(Monthtrend_Series, MKtau, R=700, l=5, sim="fixed")
+boot.ci(boot.out, type="perc")
+```
+
+Monthly trend with line fitting does not produce clear picture either the trend is increasing or decreasing with time. The next task is to plot annual trend time series.
+The time series plot produced by R reveals the presence of an downward trend in the annual precipitation levels for the entire Czech Republic over the period of interest.  
+To better see this trend, let us fit a nonparametric loess curve to the data using the lowess() function in R: For the annual result, the
+
+```{r}
+
+data_yearly <- data.frame(years=x1,Rainfall_years=y1)
+annual_trend_Series<- ts (data_yearly$Rainfall_years, frequency = 1, start =c (1950,1)) # freq 1 => annually data. 
+summary(annual_trend_Series)
+plot.ts(annual_trend_Series, col="blue", ylab="Rainfall")
+adf.test(annual_trend_Series)
+kpss.test(annual_trend_Series)
+# To convert this series into stationary
+plot(diff(log(annual_trend_Series)),col="blue",xlab=("time(months)"), ylab=("diff(log(Rainfall)"))+
+  title("Trend of Annual time series")
+lines(lowess(time(diff(log(annual_trend_Series))), (diff(log(annual_trend_Series)))),col="red", lwd=2)
+par(mfrow=c(1,1))
+acf(annual_trend_Series)
+pacf(annual_trend_Series)
+res <- MannKendall(annual_trend_Series)
+print(res)
+summary(res)
+MKtau <- function(z) MannKendall(z)$tau
+ tsboot(annual_trend_Series, MKtau, R=700, l=5, sim="fixed")
+ boot.out <- tsboot(annual_trend_Series, MKtau, R=500, l=5, sim="fixed")
+ boot.ci(boot.out, type="perc")
+```
+
+
+
+The presence of serial correlation among the annual precipitation levels can be investigated visually with the help of the acf() and pacf() functions in R, which compute the autocorrelation and partial autocorrelation corresponding to the time series of annual precipitation levels.
+
+Examining the autocorrelation and partial autocorrelation plots produced by R for the time series of annual precipitation levels suggests that the autocorrelation and partial autocorrelation present in this series do not appear significant.  (Indeed, most of the vertical spikes in the ACF and Partial ACF plots produced by R fall within the horizontal band defined by the blue dotted lines beyond which autocorrelations and partial autocorrelations would be deemed to be significant.)
+The output of this test produced by R is terse and reports just the tau value  Kandall’s tau statistic and the 2-sided p-value for testing the hypotheses “Ho: no trend” versus “Ha: monotonic trend (upward or downward)”:
+
+                  data:  annual_trend_Series
+            tau = -0.0344, 2-sided pvalue =0.67762
+            
+To compute a 95% bootstrap confidence interval for the slope of the trend, use the boot.ci() function in the boot package             Level     Percentile     
+                    95%   (-0.1685,  0.1695 ) 
+                    
+                    
+Conclusion :   By looking our results, if we compare 70 years rainfall data of Czech Republic starts from January 1950 to May 2019. the trend value given us tau negative and p value <0.5 so it reveals that trend is decreases with the rainfall decreases.  
